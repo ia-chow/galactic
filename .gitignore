@@ -11,3 +11,5 @@
 .idea/
 # ignore APOGEE data .csv since it's very large
 **/APOGEEDR17_GAIAEDR3_noflagfilter.csv
+# ignore .out files like nohup.out
+**/*.out

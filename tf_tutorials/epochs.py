@@ -225,56 +225,30 @@ from sklearn.preprocessing import StandardScaler
 training_labels_abundances = full_training_labels[:, :19]
 training_labels_errors = full_training_labels[:, 19:]
 
-# split abundances and errors into separate datasets
 test_labels_abundances = full_test_labels[:, :19]
 test_labels_errors = full_test_labels[:, 19:]
 
-# split abundances and errors into separate datasets
 validation_labels_abundances = full_validation_labels[:, :19]
 validation_labels_errors = full_validation_labels[:, 19:]
 
-standardized_abundance_training_arr = StandardScaler().fit_transform(training_labels_abundances)
-standardized_abundance_test_arr = StandardScaler().fit_transform(test_labels_abundances)
-standardized_abundance_validation_arr = StandardScaler().fit_transform(validation_labels_abundances)
+# standardize means fitting and transforming with standard scaler, standardize errors by scaling by the scale factor (mean will shift but this does not change the errors)
+training_scaler = StandardScaler().fit(training_labels_abundances)
+standardized_abundance_training_arr = training_scaler.transform(training_labels_abundances)
+standardized_error_training_arr = training_labels_errors/training_scaler.scale_
+standardized_full_training_arr = np.c_[standardized_abundance_training_arr, standardized_error_training_arr]
 
-#### UMAP:
+test_scaler = StandardScaler().fit(test_labels_abundances)
+standardized_abundance_test_arr = test_scaler.transform(test_labels_abundances)
+standardized_error_test_arr = test_labels_errors/test_scaler.scale_
+standardized_full_test_arr = np.c_[standardized_abundance_test_arr, standardized_error_test_arr]
 
-# Sweep:
-
-# # n neighbors, minimum distances and mses
-# # 4 major hyperparameters are neighbors, components, metric, min_dist
-# n_neighbors_ls = [2, 3, 5, 10, 20, 50, 100, 200, 500, 1000]
-# min_dists = [0.0, 0.02, 0.05, 0.1, 0.2, 0.5, 0.8, 0.99]
-# training_mses = np.zeros((len(n_neighbors_ls), len(min_dists)))
-# test_mses = np.zeros((len(n_neighbors_ls), len(min_dists)))
-
-# # sweep
-# for i, n_neighbors in enumerate(n_neighbors_ls):
-#     for j, min_dist in enumerate(min_dists):
-#         print(n_neighbors, min_dist)
-#         # fit using *training* data
-#         # all default except neighbors/distances, unique=True and pca embedding since spectral seems to fail for some of them...
-#         reducer = umap.UMAP(n_neighbors=n_neighbors, n_components=2, metric='euclidean', 
-#                             n_epochs=1000, learning_rate=1.0, init='pca', min_dist=min_dist, 
-#                             verbose=True, n_jobs=multiprocessing.cpu_count() - 1, unique=True, 
-#                             random_state=1234, transform_seed=1234)
-#         fit_umap = reducer.fit(standardized_abundance_training_arr)
-#         # embed *train* and *test* data
-#         embed_train = fit_umap.transform(standardized_abundance_training_arr)
-#         embed_test = fit_umap.transform(standardized_abundance_test_arr)
-#         # reconstruct *train* and *test* data and record MSE
-#         reconstruction_training = fit_umap.inverse_transform(embed_train)
-#         reconstruction_test = fit_umap.inverse_transform(embed_test)
-#         # record
-#         training_mses[i, j] = np.mean((standardized_abundance_training_arr - reconstruction_training) ** 2) * 1000  # MSE multiplied by 1000 to match the VAE ones
-#         test_mses[i, j] = np.mean((standardized_abundance_test_arr - reconstruction_test) ** 2) * 1000  # MSE multiplied by 1000 to match the VAE ones
-
-# np.save('umap_training_mses.npy', training_mses)
-# np.save('umap_test_mses.npy', test_mses)
-
-# Train a bunch of trials with fixed number seed:
+validation_scaler = StandardScaler().fit(validation_labels_abundances)
+standardized_abundance_validation_arr = validation_scaler.transform(validation_labels_abundances)
+standardized_error_validation_arr = validation_labels_errors/validation_scaler.scale_
+standardized_full_validation_arr = np.c_[standardized_abundance_validation_arr, standardized_error_validation_arr]
 
 def get_umap_mse(epochs, n_neighbors=100, min_dist=0.0, training_arr=standardized_abundance_training_arr, test_arr=standardized_abundance_test_arr, 
+                 error_training_arr=standardized_error_training_arr, error_test_arr=standardized_error_test_arr,
              components=2, metric='euclidean', learning_rate=1.0, initialization='spectral', seed=1234):
     """
     Get the MSE for UMAP given epochs, n_neighbors, min_dist, components, metric, epochs, learning rate, initialization, seed
@@ -296,95 +270,51 @@ def get_umap_mse(epochs, n_neighbors=100, min_dist=0.0, training_arr=standardize
     reconstruction_training = fit_umap.inverse_transform(embed_train)
     reconstruction_test = fit_umap.inverse_transform(embed_test)
     # return MSE
-    training_mse = np.mean((standardized_abundance_training_arr - reconstruction_training) ** 2) * 1000  # MSE multiplied by 1000 to match the VAE ones
-    test_mse = np.mean((standardized_abundance_test_arr - reconstruction_test) ** 2) * 1000  # MSE multiplied by 1000 to match the VAE ones
-    return training_mse, test_mse
+    training_mse = np.mean((training_arr - reconstruction_training) ** 2) * 1000  # MSE multiplied by 1000 to match the VAE ones
+    test_mse = np.mean((test_arr - reconstruction_test) ** 2) * 1000  # MSE multiplied by 1000 to match the VAE ones
+    # return chi2
+    training_chi2 = np.mean(((training_arr - reconstruction_training) ** 2)/(2 * error_training_arr ** 2)) * 1000  # MSE multiplied by 1000 to match the VAE, also scaled
+    test_chi2 = np.mean(((test_arr - reconstruction_test) ** 2)/(2 * error_test_arr ** 2)) * 1000  # MSE multipled by 1000 to match VAE, also scaled by variance
+    return training_mse, test_mse, training_chi2, test_chi2
+
+# from functools import partial
+
+# Define a partial function with fixed parameters
+# get_umap_mse_partial = partial(get_umap_mse,
+#                           n_neighbors=100,
+#                           min_dist=0.0,
+#                           training_arr=standardized_abundance_training_arr,
+#                           test_arr=standardized_abundance_test_arr,
+#                           error_training_arr=standardized_error_training_arr,
+#                           error_test_arr=standardized_error_test_arr,
+#                           components=2,
+#                           metric='euclidean',
+#                           learning_rate=1.0,
+#                           initialization='spectral',
+#                           seed=1234)
 
 #### PERFORM TRAINING:
 
 # epochs
-epochs = list(range(100, 5000, 10))
+epochs = list(range(10, 5000, 10))
 # multiprocess
-pool = multiprocessing.Pool(processes=multiprocessing.cpu_count() - 1)
+pool = multiprocessing.Pool(processes=min(multiprocessing.cpu_count() - 1, 47))  # crashes if all 96 processes are used on node7/8
 # run
-epochs_mses = np.array(list(tqdm(pool.imap(get_umap_mse, epochs), total = len(epochs))))
+epochs_mses_chi2s = np.array(list(tqdm(pool.imap(get_umap_mse, epochs), total = len(epochs))))
 # join and close
 pool.close()
 pool.join()
 # save
-np.save('umap_all_epochs_mses.npy', epochs_mses)
+np.save('umap_all_epochs_downsampled.npy', epochs_mses_chi2s)
 # save training and test mses
-training_epochs_mses = epochs_mses[:, 0]
-test_epochs_mses = epochs_mses[:, 1]
+training_epochs_mses = epochs_mses_chi2s[:, 0]
+test_epochs_mses = epochs_mses_chi2s[:, 1]
+training_epochs_chi2s = epochs_mses_chi2s[:, 2]
+test_epochs_chi2s = epochs_mses_chi2s[:, 3]
 # save
 np.save('umap_training_epochs_mses.npy', training_epochs_mses)
 np.save('umap_test_epochs_mses.npy', test_epochs_mses)
-
-# epochs = range(100, 5000)  # up to 5000 epochs
-# n_neighbors=100
-# min_dist=0.0
-# training_mses_epochs = np.zeros(len(epochs))
-# test_mses_epochs = np.zeros(len(epochs))
-
-# for i, epoch in tqdm(enumerate(epochs)):
-#     print(epoch)
-#     reducer = umap.UMAP(n_neighbors=n_neighbors, n_components=2, metric='euclidean', 
-#                     n_epochs=epoch, learning_rate=1.0, init='spectral', min_dist=min_dist, 
-#                     verbose=True, n_jobs=multiprocessing.cpu_count() - 1, unique=True, 
-#                     random_state=1234, transform_seed=1234)
-#     # fit with training data
-#     fit_umap = reducer.fit(standardized_abundance_training_arr)
-#     # embed *train* and *test* data
-#     embed_train = fit_umap.transform(standardized_abundance_training_arr)
-#     embed_test = fit_umap.transform(standardized_abundance_test_arr)
-#     # reconstruct *train* and *test* data and record MSE
-#     reconstruction_training = fit_umap.inverse_transform(embed_train)
-#     reconstruction_test = fit_umap.inverse_transform(embed_test)
-#     # record
-#     training_mses_epochs[i] = np.mean((standardized_abundance_training_arr - reconstruction_training) ** 2) * 1000  # MSE multiplied by 1000 to match the VAE ones
-#     test_mses_epochs[i] = np.mean((standardized_abundance_test_arr - reconstruction_test) ** 2) * 1000  # MSE multiplied by 1000 to match the VAE ones
-
-# np.save('umap_training_mses_epochs.npy', training_mses_epochs)
-# np.save('umap_test_mses_epochs.npy', test_mses_epochs)
-
-#### EXTRA:
-
-# def umap_mse(params, training_arr=standardized_abundance_training_arr, test_arr=standardized_abundance_test_arr, 
-#              components=2, metric='euclidean', epochs=200, learning_rate=1.0, initialization='pca', seed=1234):
-#     """
-#     Get the MSE for UMAP given params, components, metric, epochs, learning rate, initialization, seed
-#     and a set of training and test data
-
-#     params is tuple of n_neighbors, min_dist
-#     """
-#     # unpack params
-#     n_neighbors, min_dist = params
-#     # fit using *training* data
-#     reducer = umap.UMAP(n_neighbors=n_neighbors, n_components=components, metric=metric, 
-#                         n_epochs=epochs, learning_rate=learning_rate, init=initialization, min_dist=min_dist, 
-#                         verbose=True, n_jobs=multiprocessing.cpu_count() - 1, unique=True, 
-#                         random_state=seed, transform_seed=seed) 
-#     fit_umap = reducer.fit(training_arr)
-#     # embed *test* data
-#     embedding = fit_umap.transform(test_arr)
-#     # reconstruct *test* data and record MSE of it
-#     reconstruction = fit_umap.inverse_transform(embedding)
-#     # return MSE
-#     return np.mean((test_arr - reconstruction) ** 2) * 1000
-
-# n_neighbors, min_dist = 1000, 0.99
-# # fit using *training* data
-# reducer = umap.UMAP(n_neighbors=n_neighbors, n_components=2, metric='euclidean', 
-#                     n_epochs=200, learning_rate=1.0, init='pca', min_dist=min_dist, 
-#                     verbose=True, n_jobs=multiprocessing.cpu_count() - 1, unique=True) 
-# fit_umap = reducer.fit(standardized_abundance_training_arr)
-# # embed *test* data
-# embed_train = fit_umap.transform(standardized_abundance_training_arr)
-# embedding = fit_umap.transform(standardized_abundance_test_arr)
-# # reconstruct *test* data and record MSE of it
-# reconstruction_train = fit_umap.inverse_transform(embed_train)
-# reconstruction = fit_umap.inverse_transform(embedding)
-# # return MSE
-# np.mean((standardized_abundance_training_arr - reconstruction_train) ** 2) * 1000, np.mean((standardized_abundance_test_arr - reconstruction) ** 2) * 1000
-
-# umap_mse((1000, 0.99), epochs=1000)
+np.save('umap_training_epochs_chi2s.npy', training_epochs_chi2s)
+np.save('umap_test_epochs_chi2s.npy', test_epochs_chi2s)
+# done
+print('done')

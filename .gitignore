@@ -13,3 +13,5 @@
 **/APOGEEDR17_GAIAEDR3_noflagfilter.csv
 # ignore .out files like nohup.out
 **/*.out
+# ignore umap models folder since there's a LOT here
+umap_models/

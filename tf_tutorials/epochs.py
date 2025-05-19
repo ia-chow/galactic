@@ -4,6 +4,7 @@ import pandas as pd
 import multiprocessing
 from tqdm import tqdm
 import umap.umap_ as umap
+import joblib
 import multiprocessing
 
 # import data
@@ -263,6 +264,8 @@ def get_umap_mse(epochs, n_neighbors=100, min_dist=0.0, training_arr=standardize
                         verbose=False, n_jobs=n_jobs, unique=True, 
                         random_state=seed, transform_seed=seed) 
     fit_umap = reducer.fit(training_arr)
+    # dump to disk
+    joblib.dump(fit_umap, f"./umap_models/umap_model_epoch_{epochs}.pkl")
     # embed *test* data
     embed_train = fit_umap.transform(training_arr)
     embed_test = fit_umap.transform(test_arr)
@@ -296,25 +299,25 @@ def get_umap_mse(epochs, n_neighbors=100, min_dist=0.0, training_arr=standardize
 #### PERFORM TRAINING:
 
 # epochs
-epochs = list(range(10, 5000, 10))
+epochs = list(range(15, 4995, 10))
 # multiprocess
-pool = multiprocessing.Pool(processes=min(multiprocessing.cpu_count() - 1, 47))  # crashes if all 96 processes are used on node7/8
+pool = multiprocessing.Pool(processes=min(multiprocessing.cpu_count() - 1, 24))  # crashes if all 96 processes are used on node7/8
 # run
 epochs_mses_chi2s = np.array(list(tqdm(pool.imap(get_umap_mse, epochs), total = len(epochs))))
 # join and close
 pool.close()
 pool.join()
 # save
-np.save('umap_all_epochs_downsampled.npy', epochs_mses_chi2s)
+np.save('umap_all_epochs_downsampled_5.npy', epochs_mses_chi2s)
 # save training and test mses
 training_epochs_mses = epochs_mses_chi2s[:, 0]
 test_epochs_mses = epochs_mses_chi2s[:, 1]
 training_epochs_chi2s = epochs_mses_chi2s[:, 2]
 test_epochs_chi2s = epochs_mses_chi2s[:, 3]
 # save
-np.save('umap_training_epochs_mses.npy', training_epochs_mses)
-np.save('umap_test_epochs_mses.npy', test_epochs_mses)
-np.save('umap_training_epochs_chi2s.npy', training_epochs_chi2s)
-np.save('umap_test_epochs_chi2s.npy', test_epochs_chi2s)
+np.save('umap_training_epochs_mses_5.npy', training_epochs_mses)
+np.save('umap_test_epochs_mses_5.npy', test_epochs_mses)
+np.save('umap_training_epochs_chi2s_5.npy', training_epochs_chi2s)
+np.save('umap_test_epochs_chi2s_5.npy', test_epochs_chi2s)
 # done
 print('done')

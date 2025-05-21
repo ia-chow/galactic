@@ -299,7 +299,7 @@ def get_umap_mse(epochs, n_neighbors=100, min_dist=0.0, training_arr=standardize
 #### PERFORM TRAINING:
 
 # epochs
-epochs = list(range(15, 4995, 10))
+epochs = list(range(3, 10, 1))
 # multiprocess
 pool = multiprocessing.Pool(processes=min(multiprocessing.cpu_count() - 1, 24))  # crashes if all 96 processes are used on node7/8
 # run
@@ -308,16 +308,16 @@ epochs_mses_chi2s = np.array(list(tqdm(pool.imap(get_umap_mse, epochs), total = 
 pool.close()
 pool.join()
 # save
-np.save('umap_all_epochs_downsampled_5.npy', epochs_mses_chi2s)
+np.save('umap_all_epochs_downsampled_3_10.npy', epochs_mses_chi2s)
 # save training and test mses
 training_epochs_mses = epochs_mses_chi2s[:, 0]
 test_epochs_mses = epochs_mses_chi2s[:, 1]
 training_epochs_chi2s = epochs_mses_chi2s[:, 2]
 test_epochs_chi2s = epochs_mses_chi2s[:, 3]
 # save
-np.save('umap_training_epochs_mses_5.npy', training_epochs_mses)
-np.save('umap_test_epochs_mses_5.npy', test_epochs_mses)
-np.save('umap_training_epochs_chi2s_5.npy', training_epochs_chi2s)
-np.save('umap_test_epochs_chi2s_5.npy', test_epochs_chi2s)
+np.save('umap_training_epochs_mses_3_10.npy', training_epochs_mses)
+np.save('umap_test_epochs_mses_3_10.npy', test_epochs_mses)
+np.save('umap_training_epochs_chi2s_3_10.npy', training_epochs_chi2s)
+np.save('umap_test_epochs_chi2s_3_10.npy', test_epochs_chi2s)
 # done
 print('done')
